@@ -3,6 +3,7 @@ import { calculateTwoPhaseMethod } from '../src/lib/calc';
 import type { LinearSystem } from '../src/types';
 
 describe('calculateTwoPhaseMethod', () => {
+  // вариант 1
   // Найти максимум функции:Z = 3x₁ + 2x₂
   // При ограничениях:
   // x₁ + x₂ ≤ 8
@@ -76,13 +77,13 @@ describe('calculateTwoPhaseMethod', () => {
     }
   });
 
+  // вариант 7
   // Найти максимум функции:Z = 3x₁ + 7x₂
   // При ограничениях:
   // x₁ + x₂ ≤ 11
   // 2x₁ + x₂ ≥ 10
   // x₁ + 2x₂ = 14
   // Условие неотрицательности:x₁, x₂ ≥ 0
-
   test('должен решить задачу: максимизация Z = 3x₁ + 7x₂ при ограничениях x₁ + x₂ ≤ 11, 2x₁ + x₂ ≥ 10, x₁ + 2x₂ = 14', () => {
     const system: LinearSystem = {
       equations: [
@@ -150,10 +151,77 @@ describe('calculateTwoPhaseMethod', () => {
     }
   });
 
-  //   Найти максимум функции:Z = 5x₁ + 4x₂
+  // вариант 4
+  //   Найти максимум функции:Z = 4x₁ + 5x₂
   // При ограничениях:
-  // x₁ + 3x₂ ≤ 12
-  // 2x₁ + x₂ ≥ 8
-  // x₁ + x₂ = 6
+  // 2x₁ + x₂ ≤ 14
+  // x₁ + x₂ ≥ 5
+  // x₁ + 3x₂ = 15
   // Условие неотрицательности:x₁, x₂ ≥ 0
+  test('должен решить задачу: максимизация Z = 4x₁ + 5x₂ при ограничениях 2x₁ + x₂ ≤ 14, x₁ + x₂ ≥ 5, x₁ + 3x₂ = 15', () => {
+    const system: LinearSystem = {
+      equations: [
+        {
+          id: 'eq1',
+          expression: '2x1+x2<=14',
+          isValid: true,
+        },
+        {
+          id: 'eq2',
+          expression: 'x1+x2>=5',
+          isValid: true,
+        },
+        {
+          id: 'eq3',
+          expression: 'x1+3x2=15',
+          isValid: true,
+        },
+      ],
+      objective: {
+        expression: 'Z=4x1+5x2',
+        type: 'maximize',
+        isValid: true,
+      },
+    };
+
+    const result = calculateTwoPhaseMethod(system);
+
+    if (!result.success) {
+      console.log('Ошибка:', result.error);
+      console.log('Phase1 result:', result.phase1Result);
+      console.log('Phase2 result:', result.phase2Result);
+    }
+
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+
+    if (result.success && result.solution) {
+      // Проверяем конкретные значения
+      const x1 = result.solution.x1 || 0;
+      const x2 = result.solution.x2 || 0;
+
+      // Ожидаемые значения: x1 = 6, x2 = 2
+      expect(Math.abs(x1 - 27 / 5)).toBeLessThan(1e-6);
+      expect(Math.abs(x2 - 16 / 5)).toBeLessThan(1e-6);
+
+      // Проверяем оптимальное значение Z = 188/5
+      if (result.optimalValue !== undefined) {
+        expect(Math.abs(result.optimalValue - 188 / 5)).toBeLessThan(1e-6);
+      }
+
+      // Проверяем ограничения
+      // 2x1 + x2 <= 14
+      expect(2 * x1 + x2).toBeLessThanOrEqual(14 + 1e-6);
+
+      // x1 + x2 >= 5
+      expect(x1 + x2).toBeGreaterThanOrEqual(5 - 1e-6);
+
+      // x1 + 3x2 = 15
+      expect(Math.abs(x1 + 3 * x2 - 15)).toBeLessThan(1e-6);
+
+      // Неотрицательность
+      expect(x1).toBeGreaterThanOrEqual(-1e-6);
+      expect(x2).toBeGreaterThanOrEqual(-1e-6);
+    }
+  });
 });

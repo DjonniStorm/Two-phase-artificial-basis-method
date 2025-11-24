@@ -125,6 +125,165 @@ const ResultBlock = () => {
           </CardContent>
         </Card>
       )}
+
+      {result.uncertainties && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Погрешности результатов</CardTitle>
+            <CardDescription>
+              Абсолютные погрешности вычисленных значений
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-base font-semibold">
+                Погрешности переменных
+              </Label>
+              {result.solution && Object.keys(result.solution).length > 0 ? (
+                <div className="space-y-2">
+                  {Object.entries(result.solution)
+                    .filter(
+                      ([varName]) =>
+                        !varName.startsWith('s') && !varName.startsWith('e'),
+                    )
+                    .map(([varName, value]) => {
+                      const uncertainty =
+                        result.uncertainties?.variables[varName] || 0;
+                      return (
+                        <div
+                          key={varName}
+                          className="flex items-center justify-between p-2 bg-muted rounded-md"
+                        >
+                          <span className="font-medium">{varName}:</span>
+                          <div className="text-right">
+                            <div className="font-mono">
+                              {value.toFixed(4)} ± {uncertainty.toFixed(6)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              относительная:{' '}
+                              {Math.abs(value) > 1e-10
+                                ? (
+                                    (uncertainty / Math.abs(value)) *
+                                    100
+                                  ).toFixed(4)
+                                : 'N/A'}
+                              %
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  Погрешности не вычислены
+                </p>
+              )}
+            </div>
+
+            {result.optimalValue !== undefined &&
+              result.uncertainties.optimalValue !== undefined && (
+                <div className="space-y-2 border-t pt-4">
+                  <Label className="text-base font-semibold">
+                    Погрешность оптимального значения
+                  </Label>
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="font-mono text-lg">
+                      z = {result.optimalValue.toFixed(4)} ±{' '}
+                      {result.uncertainties.optimalValue.toFixed(6)}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      относительная:{' '}
+                      {Math.abs(result.optimalValue) > 1e-10
+                        ? (
+                            (result.uncertainties.optimalValue /
+                              Math.abs(result.optimalValue)) *
+                            100
+                          ).toFixed(4)
+                        : 'N/A'}
+                      %
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            {result.operations && (
+              <div className="space-y-2 border-t pt-4">
+                <Label className="text-base font-semibold">
+                  Количество операций
+                </Label>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="font-medium">Сложение</div>
+                    <div className="text-muted-foreground">
+                      {result.operations.additions}
+                    </div>
+                  </div>
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="font-medium">Вычитание</div>
+                    <div className="text-muted-foreground">
+                      {result.operations.subtractions}
+                    </div>
+                  </div>
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="font-medium">Умножение</div>
+                    <div className="text-muted-foreground">
+                      {result.operations.multiplications}
+                    </div>
+                  </div>
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="font-medium">Деление</div>
+                    <div className="text-muted-foreground">
+                      {result.operations.divisions}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-2 bg-primary/10 rounded-md border border-primary/20">
+                  <div className="text-sm font-medium">
+                    Всего операций:{' '}
+                    {result.operations.additions +
+                      result.operations.subtractions +
+                      result.operations.multiplications +
+                      result.operations.divisions}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2 border-t pt-4">
+              <Label className="text-base font-semibold">
+                Используемые формулы
+              </Label>
+              <div className="space-y-2 text-sm">
+                <div className="p-2 bg-muted rounded-md">
+                  <div className="font-medium mb-1">
+                    Абсолютная погрешность суммы:
+                  </div>
+                  <div className="text-muted-foreground font-mono">
+                    ΔS = Δx₁ + Δx₂ + ... + Δxₙ
+                  </div>
+                </div>
+                <div className="p-2 bg-muted rounded-md">
+                  <div className="font-medium mb-1">
+                    Абсолютная погрешность произведения:
+                  </div>
+                  <div className="text-muted-foreground font-mono">
+                    ΔP = P · (Δx₁/|x₁| + Δx₂/|x₂| + ... + Δxₙ/|xₙ|)
+                  </div>
+                </div>
+                <div className="p-2 bg-muted rounded-md">
+                  <div className="font-medium mb-1">
+                    Абсолютная погрешность частного:
+                  </div>
+                  <div className="text-muted-foreground font-mono">
+                    ΔQ = |Q| · (Δx/|x| + Δy/|y|)
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
