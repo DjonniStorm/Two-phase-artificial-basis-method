@@ -20,10 +20,12 @@ export type CalculationResult = {
   phase1Result?: {
     solution: Record<string, number>;
     optimalValue: number;
+    table?: SimplexTable;
   };
   phase2Result?: {
     solution: Record<string, number>;
     optimalValue: number;
+    table?: SimplexTable;
   };
   uncertainties?: {
     variables: Record<string, number>;
@@ -270,7 +272,19 @@ export function calculateTwoPhaseMethod(
       return {
         success: false,
         error: 'Задача не имеет допустимого решения',
-        phase1Result,
+        phase1Result: {
+          ...phase1Result,
+          table: {
+            rows: phase1Table.rows.map((row) => ({
+              coefficients: [...row.coefficients],
+              rhs: row.rhs,
+              basicVar: row.basicVar,
+            })),
+            objective: [...phase1Table.objective],
+            varNames: [...phase1Table.varNames],
+            isMinimization: phase1Table.isMinimization,
+          },
+        },
       };
     }
 
@@ -468,8 +482,32 @@ export function calculateTwoPhaseMethod(
       success: true,
       solution: finalSolution,
       optimalValue: finalOptimalValue,
-      phase1Result,
-      phase2Result,
+      phase1Result: {
+        ...phase1Result,
+        table: {
+          rows: phase1Table.rows.map((row) => ({
+            coefficients: [...row.coefficients],
+            rhs: row.rhs,
+            basicVar: row.basicVar,
+          })),
+          objective: [...phase1Table.objective],
+          varNames: [...phase1Table.varNames],
+          isMinimization: phase1Table.isMinimization,
+        },
+      },
+      phase2Result: {
+        ...phase2Result,
+        table: {
+          rows: phase2Table.rows.map((row) => ({
+            coefficients: [...row.coefficients],
+            rhs: row.rhs,
+            basicVar: row.basicVar,
+          })),
+          objective: [...phase2Table.objective],
+          varNames: [...phase2Table.varNames],
+          isMinimization: phase2Table.isMinimization,
+        },
+      },
       uncertainties: {
         variables: resultUncertainties,
         optimalValue: optimalValueUncertainty,

@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from '@components/ui/card';
 import { useCalculationResult } from '../model/use-calculation-result';
+import { SimplexTableDisplay } from './SimplexTableDisplay';
 
 const ResultBlock = () => {
   const { linearSystem, isCalculated, result } = useCalculationResult();
@@ -47,7 +48,7 @@ const ResultBlock = () => {
   }
 
   return (
-    <div className="p-6 space-y-4 overflow-auto">
+    <div className="p-6 space-y-4">
       <div className="space-y-2">
         <Label className="text-2xl font-bold">Результат вычисления</Label>
         <p className="text-sm text-muted-foreground">
@@ -104,11 +105,18 @@ const ResultBlock = () => {
             <CardTitle>
               Этап 1: Минимизация суммы искусственных переменных
             </CardTitle>
+            <CardDescription>
+              Значение целевой функции:{' '}
+              {result.phase1Result.optimalValue.toFixed(6)}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Значение: {result.phase1Result.optimalValue.toFixed(6)}
-            </p>
+          <CardContent className="space-y-4">
+            {result.phase1Result.table && (
+              <SimplexTableDisplay
+                table={result.phase1Result.table}
+                title="Финальная симплекс-таблица этапа 1"
+              />
+            )}
           </CardContent>
         </Card>
       )}
@@ -117,11 +125,18 @@ const ResultBlock = () => {
         <Card>
           <CardHeader>
             <CardTitle>Этап 2: Оптимизация исходной целевой функции</CardTitle>
+            <CardDescription>
+              Значение целевой функции:{' '}
+              {result.phase2Result.optimalValue.toFixed(6)}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Значение: {result.phase2Result.optimalValue.toFixed(6)}
-            </p>
+          <CardContent className="space-y-4">
+            {result.phase2Result.table && (
+              <SimplexTableDisplay
+                table={result.phase2Result.table}
+                title="Финальная симплекс-таблица этапа 2"
+              />
+            )}
           </CardContent>
         </Card>
       )}
