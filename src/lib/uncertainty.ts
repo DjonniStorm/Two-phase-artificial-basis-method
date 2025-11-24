@@ -6,10 +6,10 @@ export function calculateUncertainty(value: number): number {
   const str = value.toString();
   const decimalIndex = str.indexOf('.');
   if (decimalIndex === -1) {
-    return 0.5; // Целое число: 48 → 0.5
+    return 0.5; // Целое число: 48 => 0.5
   }
   const decimalPlaces = str.length - decimalIndex - 1;
-  return 0.5 * Math.pow(10, -decimalPlaces); // 48.01 → 0.005
+  return 0.5 * Math.pow(10, -decimalPlaces); // 48.01 => 0.005
 }
 
 /**
@@ -44,7 +44,6 @@ export function multiplyUncertainty(
  * Абсолютная погрешность частного: ΔQ = |Q| · (Δx/|x| + Δy/|y|)
  * Используется для более точного расчета погрешностей (зарезервировано для будущего использования)
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function divideUncertainty(
   value1: number,
   uncertainty1: number,
@@ -105,4 +104,3 @@ export function calculateResultUncertainties(
 
   return resultUncertainties;
 }
-
