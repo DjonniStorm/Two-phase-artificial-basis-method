@@ -141,7 +141,7 @@ export function calculateTwoPhaseMethod(
     parsedEquations.forEach((parsed) => {
       let coefficients = [...parsed.coefficients];
       let rhs = parsed.rhs;
-      let type = parsed.type;
+      let { type } = parsed;
 
       // Если правая часть отрицательная, умножаем на -1 и меняем тип неравенства
       if (rhs < 0) {
@@ -172,7 +172,7 @@ export function calculateTwoPhaseMethod(
         }
         row.coefficients.push(1);
         row.basicVar = slackVar;
-      } else if (parsed.type === '>=') {
+      } else if (type === '>=') {
         // Добавляем surplus и искусственную переменную
         surplusCount++;
         artificialCount++;
@@ -185,7 +185,7 @@ export function calculateTwoPhaseMethod(
         }
         row.coefficients.push(-1, 1); // surplus с -1, искусственная с +1
         row.basicVar = artificialVar;
-      } else if (parsed.type === '=') {
+      } else if (type === '=') {
         // Добавляем только искусственную переменную
         artificialCount++;
         const artificialVar = `a${artificialCount}`;

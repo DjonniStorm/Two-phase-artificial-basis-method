@@ -225,8 +225,8 @@ export const LinearSystemInput = () => {
               'flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
             )}
           >
-            <option value="minimize">Минимизировать</option>
             <option value="maximize">Максимизировать</option>
+            <option value="minimize">Минимизировать</option>
           </select>
           <Input
             value={objective.expression}
