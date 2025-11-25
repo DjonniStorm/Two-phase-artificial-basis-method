@@ -19,8 +19,10 @@ function App() {
           <LinearSystemInput />
         </ResizablePanel>
         <ResizableHandle />
-        <ResizablePanel defaultSize={1000}>
-          <ResultBlock />
+        <ResizablePanel defaultSize={1000} className="overflow-hidden">
+          <div className="h-full overflow-auto">
+            <ResultBlock />
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </main>
@@ -28,4 +30,3 @@ function App() {
 }
 
 export { App };
-

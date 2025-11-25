@@ -1,4 +1,13 @@
 import type { LinearSystem } from '@/types';
+import {
+  calculateUncertainty,
+  addUncertainty,
+  multiplyUncertainty,
+  calculateResultUncertainties,
+  type OperationCount,
+} from './uncertainty';
+import { parseEquation, parseObjective } from './parsing';
+import { simplexMethod, type SimplexRow, type SimplexTable } from './simplex';
 
 /**
  * Результат вычисления двухэтапного метода искусственного базиса
@@ -11,303 +20,40 @@ export type CalculationResult = {
   phase1Result?: {
     solution: Record<string, number>;
     optimalValue: number;
+    table?: SimplexTable;
   };
   phase2Result?: {
     solution: Record<string, number>;
     optimalValue: number;
+    table?: SimplexTable;
+  };
+  uncertainties?: {
+    variables: Record<string, number>;
+    optimalValue: number;
+  };
+  operations?: {
+    additions: number;
+    subtractions: number;
+    multiplications: number;
+    divisions: number;
   };
 };
 
-/**
- * Парсинг уравнения вида "3x + 2y <= 5" или "x - y >= 10"
- * Поддерживает операторы: <=, >=, =, <, >
- */
-function parseEquation(
-  expression: string,
-  varNames: string[],
-): {
-  coefficients: number[];
-  rhs: number;
-  type: '<=' | '>=' | '=' | '<' | '>';
-} {
-  // Убираем все пробелы для упрощения парсинга
-  const expr = expression.replace(/\s+/g, '');
-
-  // Ищем оператор сравнения
-  const operatorMatch = expr.match(/(.+?)(<=|>=|[<>=])(.+)/);
-  if (!operatorMatch) {
-    throw new Error(`Не удалось распарсить уравнение: ${expression}`);
-  }
-
-  const lhs = operatorMatch[1];
-  const operator = operatorMatch[2] as '<=' | '>=' | '=' | '<' | '>';
-  const rhsStr = operatorMatch[3];
-
-  // Парсим правую часть
-  const rhs = parseFloat(rhsStr);
-  if (isNaN(rhs)) {
-    throw new Error(`Неверная правая часть в уравнении: ${expression}`);
-  }
-
-  // Нормализуем оператор (< и > преобразуем в <= и >=)
-  let normalizedType: '<=' | '>=' | '=';
-  if (operator === '<') {
-    normalizedType = '<=';
-  } else if (operator === '>') {
-    normalizedType = '>=';
-  } else {
-    normalizedType = operator;
-  }
-
-  // Парсим коэффициенты для каждой переменной
-  const coefficients = varNames.map((varName) => {
-    // Ищем паттерн вида: [+-]число*переменная или просто переменная
-    const regex = new RegExp(
-      `([+-]?)(\\d*\\.?\\d*)${varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
-      'g',
-    );
-    const matches = [...lhs.matchAll(regex)];
-
-    if (matches.length === 0) {
-      return 0;
-    }
-
-    // Берем последнее вхождение (на случай если переменная встречается несколько раз)
-    const match = matches[matches.length - 1];
-    const sign = match[1] === '-' ? -1 : 1;
-    const numberStr = match[2];
-
-    if (numberStr === '' || numberStr === undefined) {
-      return sign * 1; // Коэффициент 1
-    }
-
-    const number = parseFloat(numberStr);
-    if (isNaN(number)) {
-      return 0;
-    }
-
-    return sign * number;
-  });
-
-  return { coefficients, rhs, type: normalizedType };
-}
-
-/**
- * Парсинг целевой функции вида "2x + 3y", "x - 2y" или "z=3x1 + 2x2"
- */
-function parseObjective(expression: string, varNames: string[]): number[] {
-  // Убираем все пробелы
-  let expr = expression.replace(/\s+/g, '');
-
-  // Если есть "z=" в начале, удаляем его
-  if (/^z\s*=/i.test(expr)) {
-    expr = expr.replace(/^z\s*=/i, '');
-  }
-
-  // Парсим коэффициенты для каждой переменной
-  const coefficients = varNames.map((varName) => {
-    // Ищем паттерн вида: [+-]число*переменная или просто переменная
-    const regex = new RegExp(
-      `([+-]?)(\\d*\\.?\\d*)${varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
-      'g',
-    );
-    const matches = [...expr.matchAll(regex)];
-
-    if (matches.length === 0) {
-      return 0;
-    }
-
-    // Суммируем все вхождения переменной
-    let sum = 0;
-    for (const match of matches) {
-      const sign = match[1] === '-' ? -1 : 1;
-      const numberStr = match[2];
-
-      if (numberStr === '' || numberStr === undefined) {
-        sum += sign * 1;
-      } else {
-        const number = parseFloat(numberStr);
-        if (!isNaN(number)) {
-          sum += sign * number;
-        }
-      }
-    }
-
-    return sum;
-  });
-
-  return coefficients;
-}
-
-/**
- * Строка симплекс-таблицы
- */
-type SimplexRow = {
-  coefficients: number[];
-  rhs: number;
-  basicVar: string;
-};
-
-/**
- * Симплекс-таблица
- */
-type SimplexTable = {
-  rows: SimplexRow[];
-  objective: number[];
-  varNames: string[];
-  isMinimization: boolean;
-};
-
-/**
- * Выполнение операции поворота (pivot)
- */
-function pivot(table: SimplexTable, rowIdx: number, colIdx: number): void {
-  const row = table.rows[rowIdx];
-
-  // Убеждаемся, что длина коэффициентов совпадает с количеством переменных
-  while (row.coefficients.length < table.varNames.length) {
-    row.coefficients.push(0);
-  }
-
-  const pivotElement = row.coefficients[colIdx];
-
-  if (Math.abs(pivotElement) < 1e-10) {
-    throw new Error('Попытка поворота на нулевом элементе');
-  }
-
-  // Нормализуем ведущую строку
-  row.coefficients = row.coefficients.map((c) => c / pivotElement);
-  row.rhs = row.rhs / pivotElement;
-  row.basicVar = table.varNames[colIdx];
-
-  // Обновляем остальные строки
-  for (let i = 0; i < table.rows.length; i++) {
-    if (i === rowIdx) continue;
-
-    // Убеждаемся, что длина коэффициентов совпадает
-    while (table.rows[i].coefficients.length < table.varNames.length) {
-      table.rows[i].coefficients.push(0);
-    }
-
-    const factor = table.rows[i].coefficients[colIdx];
-    table.rows[i].coefficients = table.rows[i].coefficients.map(
-      (c, j) => c - factor * row.coefficients[j],
-    );
-    table.rows[i].rhs = table.rows[i].rhs - factor * row.rhs;
-  }
-
-  // Обновляем целевую функцию
-  const factor = table.objective[colIdx];
-  if (!isNaN(factor) && isFinite(factor)) {
-    table.objective = table.objective.map((c, j) => {
-      const rowCoef = row.coefficients[j];
-      if (rowCoef === undefined) {
-        throw new Error(
-          `Недостаточно коэффициентов в строке: j=${j}, длина=${row.coefficients.length}, varNames=${table.varNames.length}`,
-        );
-      }
-      const newCoef = c - factor * rowCoef;
-      if (isNaN(newCoef) || !isFinite(newCoef)) {
-        throw new Error(
-          `NaN или Infinity в целевой функции при обновлении: c=${c}, factor=${factor}, coef=${rowCoef}`,
-        );
-      }
-      return newCoef;
-    });
-  }
-}
-
-/**
- * Симплекс-метод для минимизации или максимизации
- */
-function simplexMethod(table: SimplexTable): {
-  solution: Record<string, number>;
-  optimalValue: number;
-} {
-  const maxIterations = 1000;
-  let iterations = 0;
-
-  while (iterations < maxIterations) {
-    iterations++;
-
-    // Определяем входящую переменную
-    let enteringCol = -1;
-    if (table.isMinimization) {
-      // Для минимизации ищем отрицательные коэффициенты
-      enteringCol = table.objective.findIndex((c) => c < -1e-10);
-    } else {
-      // Для максимизации ищем положительные коэффициенты
-      enteringCol = table.objective.findIndex((c) => c > 1e-10);
-    }
-
-    // Если не найдено, достигнуто оптимальное решение
-    if (enteringCol === -1) {
-      break;
-    }
-
-    // Определяем выходящую переменную (минимальное отношение)
-    let minRatio = Infinity;
-    let leavingRow = -1;
-
-    for (let i = 0; i < table.rows.length; i++) {
-      const row = table.rows[i];
-      const pivotElement = row.coefficients[enteringCol];
-
-      if (pivotElement > 1e-10) {
-        const ratio = row.rhs / pivotElement;
-        if (ratio >= 0 && ratio < minRatio) {
-          minRatio = ratio;
-          leavingRow = i;
-        }
-      }
-    }
-
-    if (leavingRow === -1) {
-      throw new Error('Задача неограничена');
-    }
-
-    // Выполняем поворот
-    pivot(table, leavingRow, enteringCol);
-  }
-
-  if (iterations >= maxIterations) {
-    throw new Error('Превышено максимальное количество итераций');
-  }
-
-  // Формируем решение
-  const solution: Record<string, number> = {};
-  for (const varName of table.varNames) {
-    const row = table.rows.find((r) => r.basicVar === varName);
-    solution[varName] = row ? row.rhs : 0;
-  }
-
-  // Вычисляем оптимальное значение целевой функции
-  let optimalValue = 0;
-  for (let i = 0; i < table.varNames.length; i++) {
-    const coef = table.objective[i];
-    const val = solution[table.varNames[i]];
-    if (isNaN(coef) || isNaN(val)) {
-      throw new Error(
-        `NaN в вычислениях: coef=${coef}, val=${val} для переменной ${table.varNames[i]}`,
-      );
-    }
-    optimalValue += coef * val;
-  }
-
-  if (isNaN(optimalValue)) {
-    throw new Error('Оптимальное значение равно NaN');
-  }
-
-  return { solution, optimalValue };
-}
-
-/**
- * Двухэтапный метод искусственного базиса
- */
 export function calculateTwoPhaseMethod(
   system: LinearSystem,
 ): CalculationResult {
   try {
+    // Инициализируем счетчик операций
+    const operationCount: OperationCount = {
+      additions: 0,
+      subtractions: 0,
+      multiplications: 0,
+      divisions: 0,
+    };
+
+    // Собираем погрешности входных данных
+    const inputUncertainties = new Map<string, number>();
+
     // Проверка наличия уравнений
     if (!system.equations || system.equations.length === 0) {
       return {
@@ -350,10 +96,37 @@ export function calculateTwoPhaseMethod(
       };
     }
 
-    // Парсим уравнения
-    const parsedEquations = system.equations.map((eq) =>
-      parseEquation(eq.expression, varNames),
-    );
+    // Парсим уравнения и собираем погрешности входных данных
+    const parsedEquations = system.equations.map((eq) => {
+      const parsed = parseEquation(eq.expression, varNames);
+
+      // Сохраняем погрешности коэффициентов и правой части
+      parsed.coefficients.forEach((coef, idx) => {
+        if (Math.abs(coef) > 1e-10) {
+          const key = `eq_${eq.id}_coef_${idx}`;
+          inputUncertainties.set(key, calculateUncertainty(coef));
+        }
+      });
+      inputUncertainties.set(
+        `eq_${eq.id}_rhs`,
+        calculateUncertainty(parsed.rhs),
+      );
+
+      return parsed;
+    });
+
+    // Сохраняем погрешности целевой функции
+    if (system.objective?.expression) {
+      const objCoefficients = parseObjective(
+        system.objective.expression,
+        varNames,
+      );
+      objCoefficients.forEach((coef, idx) => {
+        if (Math.abs(coef) > 1e-10) {
+          inputUncertainties.set(`obj_coef_${idx}`, calculateUncertainty(coef));
+        }
+      });
+    }
 
     // ========== ЭТАП 1: Минимизация суммы искусственных переменных ==========
 
@@ -368,7 +141,7 @@ export function calculateTwoPhaseMethod(
     parsedEquations.forEach((parsed) => {
       let coefficients = [...parsed.coefficients];
       let rhs = parsed.rhs;
-      let type = parsed.type;
+      let { type } = parsed;
 
       // Если правая часть отрицательная, умножаем на -1 и меняем тип неравенства
       if (rhs < 0) {
@@ -399,7 +172,7 @@ export function calculateTwoPhaseMethod(
         }
         row.coefficients.push(1);
         row.basicVar = slackVar;
-      } else if (parsed.type === '>=') {
+      } else if (type === '>=') {
         // Добавляем surplus и искусственную переменную
         surplusCount++;
         artificialCount++;
@@ -412,7 +185,7 @@ export function calculateTwoPhaseMethod(
         }
         row.coefficients.push(-1, 1); // surplus с -1, искусственная с +1
         row.basicVar = artificialVar;
-      } else if (parsed.type === '=') {
+      } else if (type === '=') {
         // Добавляем только искусственную переменную
         artificialCount++;
         const artificialVar = `a${artificialCount}`;
@@ -480,7 +253,7 @@ export function calculateTwoPhaseMethod(
     };
 
     // Выполняем этап 1
-    const phase1Result = simplexMethod(phase1Table);
+    const phase1Result = simplexMethod(phase1Table, operationCount);
 
     // Проверяем, что все искусственные переменные равны нулю
     // Искусственные переменные должны быть либо не в базисе (значение 0), либо в базисе со значением 0
@@ -499,7 +272,19 @@ export function calculateTwoPhaseMethod(
       return {
         success: false,
         error: 'Задача не имеет допустимого решения',
-        phase1Result,
+        phase1Result: {
+          ...phase1Result,
+          table: {
+            rows: phase1Table.rows.map((row) => ({
+              coefficients: [...row.coefficients],
+              rhs: row.rhs,
+              basicVar: row.basicVar,
+            })),
+            objective: [...phase1Table.objective],
+            varNames: [...phase1Table.varNames],
+            isMinimization: phase1Table.isMinimization,
+          },
+        },
       };
     }
 
@@ -638,7 +423,7 @@ export function calculateTwoPhaseMethod(
     };
 
     // Выполняем этап 2
-    const phase2Result = simplexMethod(phase2Table);
+    const phase2Result = simplexMethod(phase2Table, operationCount);
 
     // Формируем финальное решение (только исходные переменные)
     const finalSolution: Record<string, number> = {};
@@ -660,12 +445,74 @@ export function calculateTwoPhaseMethod(
       finalOptimalValue = phase2Result.optimalValue;
     }
 
+    // Вычисляем погрешности результатов
+    const resultUncertainties = calculateResultUncertainties(
+      finalSolution,
+      inputUncertainties,
+      operationCount,
+      varNames,
+    );
+
+    // Вычисляем погрешность оптимального значения
+    let optimalValueUncertainty = 0;
+    if (system.objective?.expression) {
+      const objCoefficients = parseObjective(
+        system.objective.expression,
+        varNames,
+      );
+      // Погрешность суммы: ΔS = Δx₁ + Δx₂ + ...
+      for (let i = 0; i < varNames.length; i++) {
+        const varUncertainty = resultUncertainties[varNames[i]] || 0;
+        const coefUncertainty = inputUncertainties.get(`obj_coef_${i}`) || 0;
+        // Погрешность произведения: Δ(coef * var) = |coef| * Δvar + |var| * Δcoef
+        const productUncertainty = multiplyUncertainty(
+          objCoefficients[i],
+          coefUncertainty,
+          finalSolution[varNames[i]],
+          varUncertainty,
+        );
+        optimalValueUncertainty = addUncertainty(
+          optimalValueUncertainty,
+          productUncertainty,
+        );
+      }
+    }
+
     return {
       success: true,
       solution: finalSolution,
       optimalValue: finalOptimalValue,
-      phase1Result,
-      phase2Result,
+      phase1Result: {
+        ...phase1Result,
+        table: {
+          rows: phase1Table.rows.map((row) => ({
+            coefficients: [...row.coefficients],
+            rhs: row.rhs,
+            basicVar: row.basicVar,
+          })),
+          objective: [...phase1Table.objective],
+          varNames: [...phase1Table.varNames],
+          isMinimization: phase1Table.isMinimization,
+        },
+      },
+      phase2Result: {
+        ...phase2Result,
+        table: {
+          rows: phase2Table.rows.map((row) => ({
+            coefficients: [...row.coefficients],
+            rhs: row.rhs,
+            basicVar: row.basicVar,
+          })),
+          objective: [...phase2Table.objective],
+          varNames: [...phase2Table.varNames],
+          isMinimization: phase2Table.isMinimization,
+        },
+      },
+      uncertainties: {
+        variables: resultUncertainties,
+        optimalValue: optimalValueUncertainty,
+      },
+      operations: { ...operationCount },
     };
   } catch (error) {
     return {
