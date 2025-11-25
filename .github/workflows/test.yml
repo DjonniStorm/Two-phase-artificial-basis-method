@@ -1,0 +1,29 @@
+name: Two phase artificial basis method tests
+# по ответам, что мне удалось найти
+
+on:
+    push:
+        branches: [master]
+    pull_request:
+        branches: [master]
+    workflow_dispatch:
+
+jobs:
+    test:
+        name: "Algorithm Test Suite"
+        runs-on: ubuntu-24.04
+
+        steps:
+            - name: "📥 Checkout source code"
+              uses: actions/checkout@v4
+
+            - name: "⚡ Setup Bun runtime"
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: "latest"
+
+            - name: "📦 Install project dependencies"
+              run: bun install
+
+            - name: "🧪 Execute algorithm tests"
+              run: bun run test
