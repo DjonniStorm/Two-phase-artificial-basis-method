@@ -30,6 +30,7 @@ export type CalculationResult = {
   uncertainties?: {
     variables: Record<string, number>;
     optimalValue: number;
+    avgInputUncertainty?: number;
   };
   operations?: {
     additions: number;
@@ -445,6 +446,13 @@ export function calculateTwoPhaseMethod(
       finalOptimalValue = phase2Result.optimalValue;
     }
 
+    // Вычисляем среднюю погрешность входных данных
+    const avgInputUncertainty =
+      inputUncertainties.size > 0
+        ? Array.from(inputUncertainties.values()).reduce((sum, u) => sum + u, 0) /
+          inputUncertainties.size
+        : 0.5;
+
     // Вычисляем погрешности результатов
     const resultUncertainties = calculateResultUncertainties(
       finalSolution,
@@ -511,6 +519,7 @@ export function calculateTwoPhaseMethod(
       uncertainties: {
         variables: resultUncertainties,
         optimalValue: optimalValueUncertainty,
+        avgInputUncertainty,
       },
       operations: { ...operationCount },
     };
